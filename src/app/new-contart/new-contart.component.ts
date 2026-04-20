@@ -92,88 +92,106 @@ export class NewContartComponent implements OnInit {
   };
 
   insertCustomerData(): void {
-    if(this.codePostal &&  this.ville && this.pays && this.selectedCivilite?.label && this.nom  && this.address && this.prenom && this.email && this.telephone &&  this.dateNaissance && this.selectedForfait !=null){
+    if (
+      this.codePostal &&
+      this.ville &&
+      this.pays &&
+      this.selectedCivilite?.label &&
+      this.nom &&
+      this.address &&
+      this.prenom &&
+      this.email &&
+      this.telephone &&
+      this.dateNaissance &&
+      this.selectedForfait != null
+    ) {
       this.location.zipcode = this.codePostal || '';
       this.location.city = this.ville || '';
       this.location.country = this.pays || '';
-      
-      this.locationService.insertLocation(this.location).subscribe(
-        (locationResponse) => {
-          console.log('Location inserted successfully:', locationResponse);
-    
-          const locationId = locationResponse.id;
-          this.address.location_id = locationId;
-    
-          this.address.address_line1 = this.adresse || '';
-          this.address.address_line2 = this.complementAdresse || '';
-    
-          this.addressService.insertAddress(this.address).subscribe(
-            (addressResponse) => {
-              console.log(this.address);
-              console.log('Address inserted successfully:', addressResponse);
-    
-              const addressId = addressResponse.id;
-    
-              this.customer.address_id = addressId;
-              this.customer.civility = this.selectedCivilite?.label || '';
-              this.customer.firstname = this.nom || '';
-              this.customer.lastname = this.prenom || '';
-              this.customer.email = this.email || '';
-              this.customer.phone = this.telephone || '';
-              this.customer.birthdate = this.dateNaissance || '';
-              this.customer.company = this.societe || '';
-    
-              this.customerService.insertCustomer(this.customer).subscribe(
-                (customerResponse) => {
-                  console.log('Customer inserted successfully:', customerResponse);
-    
-                  const customerId = customerResponse.id;
-                  localStorage.setItem('customerId', customerId.toString());
-                  const loggedInUserId = this.authService.getSavedUserIdFromLocalStorage();
-
-                  if (loggedInUserId) {
-                    const options = {
-                      agent_id: loggedInUserId,
-                      client_id: customerId,
-                      contract_forfait: this.selectedForfait!.name,
-                      status: 'A compléter'
-                      // ... other option properties
-                    };
-                  
-                    this.optionsService.insertOptions(options).subscribe(
-                      (optionsResponse) => {
-
-                        const optionsId = optionsResponse.id;
-                        localStorage.setItem('optionsId', optionsId.toString());
-                        console.log('Options inserted successfully:', optionsResponse);
-                        this.router.navigate(['/coordonnes_bancaires']);
-
-                        // Optionally, navigate to another page or reset the form
-                      },
-                      (optionsError) => {
-                        console.error('Error inserting options:', optionsError);
-                      }
-                    );
-                  } else {
-                    console.error('Unable to get logged-in user ID from localStorage');
-                  }
-                  
+  
+      const customerId = localStorage.getItem('customerId');
+  
+      if (customerId) {
+        // Update customer data
+        const updatedCustomer: Customer = {
+          id: parseInt(customerId),
+          civility: this.selectedCivilite?.label || '',
+          firstname: this.nom || '',
+          lastname: this.prenom || '',
+          email: this.email || '',
+          phone: this.telephone || '',
+          birthdate: this.dateNaissance || '',
+          company: this.societe || ''
+        };
+  
+        this.customerService.insertCustomer(updatedCustomer).subscribe(
+          (customerResponse) => {
+            console.log('Customer inserted successfully:', customerResponse);
+  
+            const loggedInUserId = this.authService.getSavedUserIdFromLocalStorage();
+  
+            if (loggedInUserId) {
+              const options = {
+                agent_id: loggedInUserId,
+                client_id: customerResponse.id,
+                contract_forfait: this.selectedForfait!.name,
+                status: 'A compléter',
+                // ... other option properties
+              };
+  
+              // Insert options after customer
+              this.optionsService.insertOptions(options).subscribe(
+                (optionsResponse) => {
+                  const optionsId = optionsResponse.id;
+                  localStorage.setItem('optionsId', optionsId.toString());
+                  console.log('Options inserted successfully:', optionsResponse);
+  
+                  // Insert location after options
+                  this.locationService.insertLocation(this.location).subscribe(
+                    (locationResponse) => {
+                      console.log('Location inserted successfully:', locationResponse);
+  
+                      // Insert address after location
+                      const address: Address = {
+                        address_line1: this.adresse || '',
+                        address_line2: this.complementAdresse || '',
+                        location_id: locationResponse.id,
+                        customer_id: customerResponse.id
+                      };
+  
+                      this.addressService.insertAddress(address).subscribe(
+                        (addressResponse) => {
+                          console.log('Address inserted successfully:', addressResponse);
+  
+                          this.router.navigate(['/coordonnes_bancaires']);
+                          // Optionally, navigate to another page or reset the form
+                        },
+                        (addressError) => {
+                          console.error('Error inserting address:', addressError);
+                        }
+                      );
+                    },
+                    (locationError) => {
+                      console.error('Error inserting location:', locationError);
+                    }
+                  );
                 },
-                (customerError) => {
-                  console.error('Error inserting customer:', customerError);
+                (optionsError) => {
+                  console.error('Error inserting options:', optionsError);
                 }
               );
-            },
-            (addressError) => {
-              console.error('Error inserting address:', addressError);
+            } else {
+              console.error('Unable to get logged-in user ID from localStorage');
             }
-          );
-        },
-        (locationError) => {
-          console.error('Error inserting location:', locationError);
-        }
-      );
-    }else{
+          },
+          (customerError) => {
+            console.error('Error inserting customer:', customerError);
+          }
+        );
+      } else {
+        console.error('Unable to get customer ID from localStorage');
+      }
+    } else {
       this.messageService.add({
         severity: 'error',
         summary: 'Erreur',
@@ -182,6 +200,7 @@ export class NewContartComponent implements OnInit {
     }
   }
   
+
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/login']);
